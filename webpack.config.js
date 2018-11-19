@@ -84,7 +84,7 @@ function getExtensionConfig(env) {
                 new TerserPlugin({
                     cache: true,
                     parallel: true,
-                    sourceMap: env.production,
+                    sourceMap: !env.production,
                     terserOptions: {
                         ecma: 8,
                         // Keep the class names otherwise @log won't provide a useful name
@@ -110,7 +110,10 @@ function getExtensionConfig(env) {
                     use: 'ts-loader',
                     exclude: /node_modules|\.d\.ts$/
                 }
-            ]
+            ],
+            // Removes `Critical dependency: the request of a dependency is an expression` from `./node_modules/vsls/vscode.js`
+            exprContextRegExp: /^$/,
+            exprContextCritical: false
         },
         resolve: {
             extensions: ['.ts', '.tsx', '.js', '.jsx']

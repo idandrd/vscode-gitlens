@@ -4387,7 +4387,8 @@
         "date-fns": "1.29.0",
         "iconv-lite": "0.4.24",
         "lodash-es": "4.17.11",
-        "tslib": "1.9.3"
+        "tslib": "1.9.3",
+        "vsls": "0.3.967"
     },
     "devDependencies": {
         "@types/clipboardy": "1.1.0",
