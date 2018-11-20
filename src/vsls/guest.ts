@@ -166,18 +166,11 @@ export class VslsGuestService implements Disposable {
     }
 
     @debug()
-    private async sendRequest<TRequest, TResponse>(
+    private sendRequest<TRequest, TResponse>(
         requestType: RequestType<TRequest, TResponse>,
         request: TRequest,
         cancellation?: CancellationToken
     ): Promise<TResponse> {
-        try {
-            const response = await this._service.request(requestType.name, [request]);
-            return response;
-        }
-        catch (ex) {
-            debugger;
-            throw ex;
-        }
+        return this._service.request(requestType.name, [request]);
     }
 }

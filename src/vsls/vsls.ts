@@ -1,7 +1,7 @@
 'use strict';
 import { Disposable, workspace } from 'vscode';
 import { getApi, LiveShare, Role, SessionChangeEvent } from 'vsls';
-import { DocumentSchemes } from '../constants';
+import { CommandContext, DocumentSchemes, setCommandContext } from '../constants';
 import { Logger } from './../logger';
 import { VslsGuestService } from './guest';
 import { VslsHostService } from './host';
@@ -39,6 +39,7 @@ export class VslsController implements Disposable {
                 workspace.workspaceFolders !== undefined &&
                 workspace.workspaceFolders.some(f => f.uri.scheme === DocumentSchemes.Vsls)
             ) {
+                setCommandContext(CommandContext.Readonly, true);
                 this._waitForReady = new Promise(resolve => (this._onReady = resolve));
             }
 
@@ -84,13 +85,16 @@ export class VslsController implements Disposable {
         const sessionId = e.session.id;
         if (sessionId != null) {
             if (e.session.role === Role.Host) {
+                setCommandContext(CommandContext.Readonly, undefined);
                 this._host = await VslsHostService.share(api);
             }
             else {
+                setCommandContext(CommandContext.Readonly, true);
                 this._guest = await VslsGuestService.connect(api);
             }
         }
         else {
+            setCommandContext(CommandContext.Readonly, undefined);
             if (this._host !== undefined) {
                 this._host.dispose();
             }
