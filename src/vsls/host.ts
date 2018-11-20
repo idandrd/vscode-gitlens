@@ -22,6 +22,27 @@ import {
 } from './protocol';
 import { vslsUriRootRegex } from './vsls';
 
+const defaultWhitelistFn = () => true;
+const gitWhitelist = new Map<string, ((args: any[]) => boolean)>([
+    ['blame', defaultWhitelistFn],
+    ['branch', args => args[1] === '-vv' || args[1] === '--contains'],
+    ['cat-file', defaultWhitelistFn],
+    ['config', args => args[1] === '--get' || args[1] === '--get-regex'],
+    ['diff', defaultWhitelistFn],
+    ['difftool', defaultWhitelistFn],
+    ['log', defaultWhitelistFn],
+    ['ls-files', defaultWhitelistFn],
+    ['ls-tree', defaultWhitelistFn],
+    ['merge-base', defaultWhitelistFn],
+    ['remote', args => args[1] === '-v' || args[1] === 'get-url'],
+    ['rev-parse', defaultWhitelistFn],
+    ['show', defaultWhitelistFn],
+    ['stash', args => args[1] === 'list'],
+    ['status', defaultWhitelistFn],
+    ['symbolic-ref', defaultWhitelistFn],
+    ['tag', args => args[1] === '-l']
+]);
+
 export class VslsHostService implements Disposable {
     static ServiceId = 'proxy';
 
@@ -69,17 +90,15 @@ export class VslsHostService implements Disposable {
         request: GitCommandRequest,
         cancellation: CancellationToken
     ): Promise<GitCommandResponse> {
-        try {
-            const data = await git(request.options, ...request.args);
-            if (typeof data === 'string') {
-                return { data: data };
-            }
+        const fn = gitWhitelist.get(request.args[0]);
+        if (fn === undefined || !fn(request.args)) throw new Error(`Git ${request.args[0]} command is not allowed`);
 
-            return { data: data.toString('binary'), isBuffer: true };
+        const data = await git(request.options, ...request.args);
+        if (typeof data === 'string') {
+            return { data: data };
         }
-        catch (ex) {
-            throw ex;
-        }
+
+        return { data: data.toString('binary'), isBuffer: true };
     }
 
     @log()
