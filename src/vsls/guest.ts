@@ -12,8 +12,6 @@ import {
     WorkspaceFileExistsRequestType
 } from './protocol';
 
-export const leadingSlashRegex = /^[\/|\\]/;
-
 export class VslsGuestService implements Disposable {
     static async connect(api: LiveShare) {
         const service = await api.getSharedService(VslsHostService.ServiceId);

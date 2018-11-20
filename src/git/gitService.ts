@@ -1966,7 +1966,7 @@ export class GitService implements Disposable {
 
     @log()
     async getDiffTool(repoPath?: string) {
-        return (await Git.config_get('diff.guitool', repoPath)) || (await Git.config_get('diff.tool', repoPath));
+        return (await Git.config_get('diff.guitool', repoPath, { local: true })) || (await Git.config_get('diff.tool', repoPath, { local: true }));
     }
 
     @log()

@@ -456,9 +456,9 @@ export class Git {
         return git<string>({ cwd: repoPath }, ...params);
     }
 
-    static async config_get(key: string, repoPath?: string) {
+    static async config_get(key: string, repoPath?: string, options: { local?: boolean } = {}) {
         const data = await git<string>(
-            { cwd: repoPath || '', errors: GitErrorHandling.Ignore },
+            { cwd: repoPath || '', errors: GitErrorHandling.Ignore, local: options.local },
             'config',
             '--get',
             key
