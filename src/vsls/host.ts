@@ -3,8 +3,9 @@ import { CancellationToken, Disposable, Uri, workspace, WorkspaceFoldersChangeEv
 import { LiveShare, SharedService } from 'vsls';
 import { Container } from '../container';
 import { git } from '../git/git';
-import { log, Strings } from '../system';
-import { Iterables } from '../system/iterable';
+import { GitUri } from '../git/gitUri';
+import { Logger } from '../logger';
+import { debug, Iterables, log, Strings } from '../system';
 import {
     GitCommandRequest,
     GitCommandRequestType,
@@ -93,8 +94,11 @@ export class VslsHostService implements Disposable {
         // TODO
     }
 
+    @debug()
     private async onWorkspaceFoldersChanged(e?: WorkspaceFoldersChangeEvent) {
         if (workspace.workspaceFolders === undefined || workspace.workspaceFolders.length === 0) return;
+
+        const cc = Logger.getCorrelationContext();
 
         this._localToSharedPaths.clear();
         this._sharedToLocalPaths.clear();
@@ -105,6 +109,7 @@ export class VslsHostService implements Disposable {
             localPath = Strings.normalizePath(f.uri.fsPath);
             sharedPath = Strings.normalizePath(this.convertLocalUriToShared(f.uri).fsPath);
 
+            Logger.debug(cc, `shared='${sharedPath}' \u2194 local='${localPath}'`);
             this._localToSharedPaths.set(localPath, sharedPath);
             this._sharedToLocalPaths.set(sharedPath, localPath);
         }
@@ -115,7 +120,7 @@ export class VslsHostService implements Disposable {
 
         let sharedPaths = Iterables.join(this._localToSharedPaths.values(), '|');
         sharedPaths = sharedPaths.replace(/(\/|\\)/g, '[\\\\/|\\\\]');
-        this._sharedPathsRegex = new RegExp(`(${sharedPaths})`, 'gi');
+        this._sharedPathsRegex = new RegExp(`^(${sharedPaths})`, 'i');
     }
 
     @log()
@@ -128,11 +133,26 @@ export class VslsHostService implements Disposable {
         const fn = gitWhitelist.get(args[0]);
         if (fn === undefined || !fn(args)) throw new Error(`Git ${args[0]} command is not allowed`);
 
-        // This is all so ugly, but basically we are converting shared paths to local paths
-        const cwd = Strings.normalizePath(options.cwd || '', { addLeadingSlash: true });
-        const localCwd = this._sharedToLocalPaths!.get(cwd);
-        if (localCwd !== undefined) {
-            options.cwd = localCwd;
+        let isRootWorkspace = false;
+        if (options.cwd !== undefined && options.cwd.length > 0 && this._sharedToLocalPaths !== undefined) {
+            // This is all so ugly, but basically we are converting shared paths to local paths
+            if (this._sharedPathsRegex !== undefined && this._sharedPathsRegex.test(options.cwd)) {
+                options.cwd = Strings.normalizePath(options.cwd).replace(this._sharedPathsRegex, (match, shared) => {
+                    if (!isRootWorkspace) {
+                        isRootWorkspace = shared === '/~0';
+                    }
+
+                    const local = this._sharedToLocalPaths.get(shared);
+                    return local != null ? local : shared;
+                });
+            }
+            else if (leadingSlashRegex.test(options.cwd)) {
+                const localCwd = this._sharedToLocalPaths.get('/~0');
+                if (localCwd !== undefined) {
+                    isRootWorkspace = true;
+                    options.cwd = GitUri.resolve(options.cwd, localCwd);
+                }
+            }
         }
 
         let files = false;
@@ -148,16 +168,16 @@ export class VslsHostService implements Disposable {
 
             if (typeof arg === 'string') {
                 // If we are the "root" workspace, then we need to remove the leading slash off the path (otherwise it will not be treated as a relative path)
-                if (leadingSlashRegex.test(arg[0]) && cwd === '/~0') {
+                if (isRootWorkspace && leadingSlashRegex.test(arg[0])) {
                     args.splice(i, 1, arg.substr(1));
                 }
 
-                if (this._sharedPathsRegex!.test(arg)) {
+                if (this._sharedPathsRegex !== undefined && this._sharedPathsRegex.test(arg)) {
                     args.splice(
                         i,
                         1,
-                        Strings.normalizePath(arg).replace(this._sharedPathsRegex!, (match, shared) => {
-                            const local = this._sharedToLocalPaths!.get(shared);
+                        Strings.normalizePath(arg).replace(this._sharedPathsRegex, (match, shared) => {
+                            const local = this._sharedToLocalPaths.get(shared);
                             return local != null ? local : shared;
                         })
                     );
@@ -170,7 +190,7 @@ export class VslsHostService implements Disposable {
             // And then we convert local paths to shared paths
             if (this._localPathsRegex !== undefined && data.length > 0) {
                 data = data.replace(this._localPathsRegex, (match, local) => {
-                    const shared = this._localToSharedPaths!.get(local);
+                    const shared = this._localToSharedPaths.get(local);
                     return shared != null ? shared : local;
                 });
             }
@@ -215,7 +235,7 @@ export class VslsHostService implements Disposable {
     ): Promise<WorkspaceFileExistsResponse> {
         let { repoPath } = request;
         if (this._sharedPathsRegex !== undefined && this._sharedPathsRegex.test(repoPath)) {
-            repoPath = Strings.normalizePath(repoPath).replace(this._sharedPathsRegex!, (match, shared) => {
+            repoPath = Strings.normalizePath(repoPath).replace(this._sharedPathsRegex, (match, shared) => {
                 const local = this._sharedToLocalPaths!.get(shared);
                 return local != null ? local : shared;
             });
@@ -226,12 +246,25 @@ export class VslsHostService implements Disposable {
         return { exists: await Container.git.fileExists(repoPath, request.fileName, request.options) };
     }
 
+    @debug({
+        exit: result => `returned ${result.toString(true)}`
+    })
     private convertLocalUriToShared(localUri: Uri) {
+        const cc = Logger.getCorrelationContext();
+
         let sharedUri = this._api.convertLocalUriToShared(localUri);
+        Logger.debug(
+            cc,
+            `LiveShare.convertLocalUriToShared(${localUri.toString(true)}) returned ${sharedUri.toString(true)}`
+        );
 
         const localPath = localUri.path;
-        const sharedPath = sharedUri.path;
-        if (sharedPath.endsWith(localPath)) {
+        let sharedPath = sharedUri.path;
+        if (sharedUri.authority.length > 0) {
+            sharedPath = `/${sharedUri.authority}${sharedPath}`;
+        }
+
+        if (new RegExp(`${localPath}$`, 'i').test(sharedPath)) {
             if (sharedPath.length === localPath.length) {
                 const folder = workspace.getWorkspaceFolder(localUri)!;
                 sharedUri = sharedUri.with({ path: `/~${folder.index}` });
