@@ -52,13 +52,3 @@ export interface WorkspaceFileExistsResponse {
 export const WorkspaceFileExistsRequestType = new RequestType<WorkspaceFileExistsRequest, WorkspaceFileExistsResponse>(
     'workspace/fileExists'
 );
-
-export interface WorkspacePathsRequest {}
-
-export interface WorkspacePathsResponse {
-    paths: { localUri: string; sharedUri: string }[];
-}
-
-export const WorkspacePathsRequestType = new RequestType<WorkspacePathsRequest, WorkspacePathsResponse>(
-    'workspace/paths'
-);
