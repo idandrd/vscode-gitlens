@@ -4368,7 +4368,7 @@
     "scripts": {
         "build": "webpack --env.development",
         "bundle": "webpack --env.production",
-        "clean": "git clean -Xdf -e !.cache-images",
+        "clean": "git clean -Xdf -e !.cache-images -e !node_modules -e !node_modules/**/*",
         "lint": "tslint --project tsconfig.json && tslint --project ui.tsconfig.json",
         "pack": "vsce package",
         "pretty": "prettier --config .prettierrc --loglevel warn --write \"./**/*.{ts,md,json}\" && tslint --project tsconfig.json --fix && tslint --project ui.tsconfig.json --fix",
